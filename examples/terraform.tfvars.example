@@ -22,6 +22,18 @@ mailto   = "admin@example.lan"
 pve_iso_url      = "https://download.proxmox.com/iso/proxmox-ve_9.2-1.iso"
 pve_iso_checksum = "" # optional; changing it rebuilds all ISOs
 
+# Base URL serving build/iso over HTTP for Redfish virtual media boot
+# (start with `make iso-serve`; must be reachable from the BMCs).
+iso_http_base_url = "http://10.0.0.1:8080"
+
+# Machine installation via the dell/redfish provider (redfish.tf): attaches
+# the ISO as virtual media, arms a one-time boot and resets/powers the
+# machine — only for nodes whose PVE API does not answer yet.
+node_install_enabled       = true
+node_install_reset_type    = "PowerCycle" # powers on machines that are off
+node_install_power_on      = true
+redfish_ssl_insecure       = true
+
 nodes = {
   node01 = {
     # Bootstrap node: creates the cluster on first boot.
@@ -33,18 +45,32 @@ nodes = {
     disks           = ["sda", "sdb"]
     zfs_ashift      = 12
     nic_filter      = { "ID_NET_NAME" = "eno1" }
+    # BMC for Redfish boot tasks (password from Vault field
+    # 'bmc_node01_password'; install with `make node-install REDFISH_NODE=node01`).
+    bmc = {
+      address = "https://10.0.0.201"
+    }
   }
   node02 = {
     management_cidr = "10.0.0.12/24"
     filesystem      = "zfs"
     zfs_raid        = "raid1"
     disks           = ["sda", "sdb"]
+    bmc = {
+      address  = "https://10.0.0.202"
+      username = "root"
+    }
   }
   node03 = {
     management_cidr = "10.0.0.13/24"
     filesystem      = "zfs"
     zfs_raid        = "raid1"
     disks           = ["sda", "sdb"]
+    bmc = {
+      address     = "https://10.0.0.203"
+      # Vendor-specific one-time boot source override target, if "Cd" is wrong:
+      boot_target = "Cd"
+    }
   }
 }
 

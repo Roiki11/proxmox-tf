@@ -67,3 +67,18 @@ output "pdm_authid" {
   value       = var.pdm_enabled ? local.pdm_authid : null
   sensitive   = true
 }
+
+
+output "node_bmcs" {
+  description = "BMC/Redfish connection info per node (no passwords — BMC passwords come from the Vault fields shown in password_field)."
+  value = {
+    for name, node in var.nodes : name => node.bmc != null ? {
+      address        = node.bmc.address
+      username       = node.bmc.username
+      password_field = node.bmc.password_vault_field != null ? node.bmc.password_vault_field : "bmc_${name}_password"
+      boot_target    = node.bmc.boot_target
+      mgmt_ip        = element(split("/", node.management_cidr), 0)
+      iso_url        = var.iso_http_base_url != "" ? "${var.iso_http_base_url}/${name}-auto.iso" : ""
+    } : null
+  }
+}

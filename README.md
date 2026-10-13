@@ -31,6 +31,11 @@ Terraform/OpenTofu project that bootstraps **Proxmox VE clusters** end-to-end:
    Ceph pools are managed declaratively through the `bpg/proxmox` provider,
    applied with `make pve-storage`, `make pve-network`, `make pve-sdn` or
    `make pve-ceph`.
+9. **Bare-metal installation via Redfish** — installs unprovisioned Dell
+   (iDRAC) machines from their auto-install ISOs through the
+   `dell/redfish` Terraform provider: virtual media attachment, one-time
+   boot override and power control, gated by a provisioned-state check
+   (nodes whose PVE API already answers are skipped).
 
 ```
                        ┌────────────────────────────────────────────┐
@@ -189,6 +194,55 @@ fields (`root_password`, `root_password_hashed`, `pve_password`, `pve_api_token`
 `node_isos`, `node_answer_files`, `node_first_boot_hooks`, `bootstrap_node`,
 `installation_instructions`, `pve_nodes`, `node_certificates`, `secrets_source`,
 `pdm_remote_id`, `pdm_authid`.
+
+## Machine installation via Redfish (phase 1.5)
+
+Bare-metal machines (Dell PowerEdge/iDRAC; the provider speaks standard
+Redfish, so other vendors largely work too) are installed with the
+`dell/redfish` Terraform provider — declaratively, in Terraform itself.
+
+Declare the BMC per node (`nodes.<name>.bmc = { address, username,
+boot_target }`) and `iso_http_base_url` (the BMC fetches the ISO over HTTP,
+so it must reach the machine running `make iso-serve`). With
+`node_install_enabled = true` (`redfish.tf`), an apply runs for every
+**not-yet-provisioned** node — the provisioned state is checked at plan time
+(probe of the node's management IP on port 8006 via
+`scripts/node-provisioned-check.sh`):
+
+1. `redfish_virtual_media.install` attaches `<node>-auto.iso` as virtual media,
+2. `redfish_boot_source_override.install` arms a one-time boot on the virtual
+   CD — Dell/iDRAC-specific (it probes the iDRAC's OEM attributes); pre-17G
+   iDRACs also apply `node_install_reset_type` here (ForceRestart/
+   GracefulRestart/PowerCycle — use `PowerCycle` for machines that are off),
+3. `redfish_power.install` issues a `ForceOn` afterwards
+   (`node_install_power_on = true`, default) — this is what boots 17G+
+   machines, where the boot-override resource only arms the override.
+
+```bash
+make isos                 # build/iso/<node>-auto.iso per node
+make iso-serve            # serve build/iso over HTTP (port ISO_HTTP_PORT, default 8080)
+make node-install         # install every unprovisioned BMC-declared node
+make node-install REDFISH_NODE=node01    # ... or a single machine
+make node-wait REDFISH_NODE=node01       # block until the node's PVE API is up
+make node-wait-all                       # wait for the whole cluster
+```
+
+`make node-install` forces `node_install_enabled = true` for its run (the
+flag still defaults to false so ordinary applies never touch the BMCs).
+
+Ad-hoc BMC tasks (`scripts/node-redfish.sh`): `make node-status
+REDFISH_NODE=node01` (BMC power state), `make node-power REDFISH_NODE=node01
+REDFISH_POWER_ACTION=GracefulRestart`, `make node-eject REDFISH_NODE=node01`
+(remove virtual media). Credentials come from the Vault field
+`bmc_<node>_password`; override with `REDFISH_BMC_PASSWORD` or
+`REDFISH_AUTH_MODE=basic` for BMCs without Redfish session support.
+Self-signed BMC certificates are accepted by default (`redfish_ssl_insecure`).
+
+To force a re-install of an already-provisioned machine, set
+`node_install_force = true` (dangerous: re-installs the node).
+
+> **State note:** the BMC (and PDM) credentials are written to the state file
+> — always use an encrypted remote backend for this project.
 
 ## Direct cluster configuration (phase 2)
 

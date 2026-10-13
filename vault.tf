@@ -25,6 +25,12 @@
 #                                  secret used to register the remote; when set,
 #                                  this project does not create a user/token
 #   pdm_remote_authid              (string, optional) authid matching pdm_remote_token
+#   bmc_<node>_password            (string) BMC password for the Redfish
+#                                  machine-installation flow (redfish.tf);
+#                                  per-node override via
+#                                  nodes.<node>.bmc.password_vault_field
+#   storage_<id>_password          (string) SMB/CIFS or PBS storage password
+#   storage_<id>_encryption_key    (string, optional) existing PBS encryption key
 #
 # The Vault provider authenticates with VAULT_ADDR / VAULT_TOKEN (or any
 # auth_login_* block you add in providers.tf) — never with tfvars.

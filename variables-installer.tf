@@ -81,6 +81,12 @@ variable "pve_iso_checksum" {
   default     = ""
 }
 
+variable "iso_http_base_url" {
+  description = "Base URL under which build/iso is served over HTTP for Redfish virtual media (e.g. 'http://10.0.0.1:8080' — must be reachable from the BMCs). The boot tasks expect '<base>/<node>-auto.iso'; serve with 'make iso-serve'."
+  type        = string
+  default     = ""
+}
+
 variable "build_dir" {
   description = "Directory where answer files, hooks and prepared ISOs are generated."
   type        = string

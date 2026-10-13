@@ -57,6 +57,12 @@ variable "nodes" {
     lvm_hdsize      = optional(number)
     lvm_swapsize    = optional(number)
     timezone        = optional(string)
+    bmc = optional(object({
+      address              = string
+      username             = optional(string, "root")
+      password_vault_field = optional(string)
+      boot_target          = optional(string, "Cd")
+    }))
   }))
 
   validation {

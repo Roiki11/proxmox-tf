@@ -22,3 +22,9 @@ provider "vault" {
 }
 
 provider "local" {}
+
+# The Dell Redfish provider connects to each BMC per resource (redfish_server
+# block in redfish.tf), so no provider-level credentials are needed here.
+provider "redfish" {}
+
+provider "external" {}

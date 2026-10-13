@@ -35,6 +35,77 @@ provider "registry.opentofu.org/bpg/proxmox" {
   ]
 }
 
+provider "registry.opentofu.org/dell/redfish" {
+  version     = "1.6.2"
+  constraints = "~> 1.6"
+  hashes = [
+    "h1:5wO07yjAqn9SsIoTRcua5dijNfMnnM4/crCrvOeY81M=",
+    "h1:65RENbfjgF9dHJkMneNoqzl2U8HqPANiYl5eqMHnRQk=",
+    "h1:8WHuj4mmQdO7SGJF9gSaoVP/L8OjrTHXQgK0Y+eZRyU=",
+    "h1:B5wz2as+ue/7m/4pqo9L66SHpcpC6IQtbIFyb4d7HRc=",
+    "h1:GRk3tTgHJpqRCK/uGNppxN0bMMXMDo68rvWN1O25WUI=",
+    "h1:GdTsCQKeiwxGXe1Cq9quGD/KUo190MEo5RWk0JMu2z8=",
+    "h1:ItDnvGtvk9RGu3sjQi1bIzcx+lNNQ1RbMpJGtYExwag=",
+    "h1:NDeVx/j9pA9/rRt5GhyyEu15J8oeDyT/jxglHAYPcuA=",
+    "h1:UszenYs1S+qFpCiHNJs0Ab3L9iw7cs81F9Z0OknZ75o=",
+    "h1:fHGWhyeDBmjYPLBdzq73DUny5FGCbuKyADmdFFbiCB4=",
+    "h1:flo9zNs+7cQAFstUUUQpB1loXTo5ZA7RFn2IIEaoW/4=",
+    "h1:v05SdZ5r4O2P00GxG1IJpzcnQC4twVJCnnxDq/2dRCM=",
+    "h1:vaP0VYcrofUkhigrm/cUuwMSl6W7C343xClATsgWqWw=",
+    "zh:2119924efd34f7a7a9d684576052b7db02a89d83d4da0fcea1350b8a45333f31",
+    "zh:52201d2d1a1d290f6f34152b3dc1f86a4d1ec084841b4e7e1c8dcaed27e681ea",
+    "zh:55f6330dd17a6ee656a2f027178ddf9f68890c1ea00760c1fccbb88c47a2935d",
+    "zh:5b9187d74d74349f683b582ad6ef9c890537ca3a94464be19ee1afc41aaaf902",
+    "zh:5f50e2e3bb14287da655a2a9593813aeb884a1cc08038e5484e2cab1e34cbc91",
+    "zh:69e03a2ad5636c8ae8584f30e7aca09be8325adf107bbce73393cf8ce3523681",
+    "zh:7eac2e8b21e77e126efa8aa842eb8050bc439a612dfa366deb9e3db5554a6e96",
+    "zh:a034bfe635063cdba5b75cca3b81161d8eba32be4f23570e29ac2648051c2b6f",
+    "zh:a054c9490ab3b9ffcf2d3d68fa8dcfa3c8a58c65f9bbc2b6eb97f911fa2e0b60",
+    "zh:aa38f44cebde4b00f135320e6577b4e217bfb75b4888c88eeb4e048a21b309dc",
+    "zh:c591266944bac91b7552961c4c62da5e7f88dc69c6659f94e84b1ebd9b8ce3ef",
+    "zh:c99735978e44670f2190d2d0421b33dec05550f2be3377af5057e7d602ddd96e",
+    "zh:d750050d437c58f3e084240ccaa1f5c851200aadf09568f7fcce68083ce93c38",
+    "zh:f569b65999264a9416862bca5cd2a6177d94ccb0424f3a4ef424428912b9cb3c",
+  ]
+}
+
+provider "registry.opentofu.org/hashicorp/external" {
+  version     = "2.4.2"
+  constraints = "~> 2.3"
+  hashes = [
+    "h1:+0PiugIB6q/pd3hCYhyYRWWxHT0S8C3mbW0qn983zAQ=",
+    "h1:/5O2eEFkFnNB96Xi4po3saQwlMh6eqIEDiOmJIgyHM0=",
+    "h1:0Q2nTP62usvG9J89BvvxIemDLbTqAzGcMNsNGqFLsIk=",
+    "h1:0g93jI9ZPh/RmdK53pFqWyWrMladak2gCyou1k5XiWo=",
+    "h1:9bY7HqqP8+SfyvukO3k1kfIkrX3IjgiiacxxklmXJ9c=",
+    "h1:ADPLRkJUIlVt3gilPYpLwiE5TbQ2SyGB1EE5y9zWjTU=",
+    "h1:CBdb8eVwpWeD4ojPUlwpbK+9Yo5NG3G1edfjlNvwG+w=",
+    "h1:D3wq4Q7oCRUtsLeE2K4Jf1ZJ15hFaCfhmB9S855ImZc=",
+    "h1:FFRXyIt3o2fVfleo3tJuNYrTcRaJqa9vDEbO2dZgaRA=",
+    "h1:GM+thz5A83mLPPkJ073ATfwJyDbSnZVHHHqBKzzFinY=",
+    "h1:ahUY0l1FNODNmLuBUNi7tJB19W811fv4IANNHIPAb6U=",
+    "h1:be+NIANKyUK46/VH5jnEyA4OmTAGoIJ/2NM1k/m9UT4=",
+    "h1:eDnfvLpHOUXEQb3ARiS5zFkhw5nX26gkpR6q31sJn0c=",
+    "h1:jXUUUAk+b7Y8cIFbce/DLXY36r8RZAkYMj/QoqxTuWs=",
+    "h1:qeL4G+ZV53vDi9Rf0rhUD09yIvW33S3w6S2M7720poo=",
+    "zh:113856f1d481161c40c5b505038a586b4aedd53d6a018ee19487b87dfabfbc51",
+    "zh:20ce394cc85ee0537c65d2485e07f9c8051c08b0224cd2dfc87508e9d96b5878",
+    "zh:2666d204df95495817f22b311c06cb0c717b0166e2510eee9df333ee525860e9",
+    "zh:64cf0c60925fe0716c5737a68f8c0de5328fe3a33204e41c1aa2d09a897d92bd",
+    "zh:7b154931ef4f95bc1cf4dfe36574f89394026322f6512fc7c490b26df125e8cb",
+    "zh:83e83b912eadf7e29d4a2a16a86385c57d2dd6499f8993f52d2cd14edf7862a5",
+    "zh:8e0f18100877be630487b254b61e48afc70360912b246714fc5dbf6111b37556",
+    "zh:9fd1501f0c5d9e4ecb4581f54c9b97d93062ca307dc0ff03904557bb674b0600",
+    "zh:ace69a2cf064e7c95c7971452b0269f77c406a5c8c9f97c0ac219543e72a7dc2",
+    "zh:b149b17a8a5938c8b2aeef9a9cff990f0f8b083ad6837fd299a361fb62aa3ee1",
+    "zh:d3109988b35bb358173037f04fa0e65244c231200d2a8aef08451568251409d3",
+    "zh:da0fd1e379268d59d5947733c45f4cd61521b1134819f74f95bc6123505df156",
+    "zh:e2cfaa5c9b6d94b39df90a3b39a0f64aad7391508f462a71e2c93d56b225d6d4",
+    "zh:eab9137e47892ab8e342cff5499a832f9139cf1d44a7faf1561fb2488412e441",
+    "zh:f539bb0998a159b3d96aa0fd7bac0cdf5ef8bff4a9648e6fa360bc8ff4e3d169",
+  ]
+}
+
 provider "registry.opentofu.org/hashicorp/local" {
   version     = "2.9.1"
   constraints = "~> 2.5"

@@ -15,5 +15,13 @@ terraform {
       source  = "hashicorp/vault"
       version = "~> 5.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.3"
+    }
+    redfish = {
+      source  = "dell/redfish"
+      version = "~> 1.6"
+    }
   }
 }
