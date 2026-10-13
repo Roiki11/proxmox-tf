@@ -1,0 +1,91 @@
+# Example configuration for the proxmox-tf project.
+# Copy to terraform.tfvars (gitignored) and adapt.
+#
+# SECRETS: no secrets belong in this file. All credentials are read from a
+# HashiCorp Vault KV-v2 secret (see vault.tf for the expected fields). The
+# Vault provider authenticates via the VAULT_ADDR / VAULT_TOKEN environment
+# variables (or add an auth_login_* block in providers.tf).
+
+cluster_name   = "lab"
+cluster_domain = "example.lan"
+bootstrap_node = "node01"
+
+root_ssh_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... you@host",
+]
+
+keyboard = "en-us"
+country  = "us"
+mailto   = "admin@example.lan"
+
+# Base PVE ISO: downloaded automatically on first `make isos` if missing.
+pve_iso_url      = "https://download.proxmox.com/iso/proxmox-ve_9.2-1.iso"
+pve_iso_checksum = "" # optional; changing it rebuilds all ISOs
+
+nodes = {
+  node01 = {
+    # Bootstrap node: creates the cluster on first boot.
+    management_cidr = "10.0.0.11/24"
+    gateway         = "10.0.0.1"
+    dns_server      = "10.0.0.1"
+    filesystem      = "zfs"
+    zfs_raid        = "raid1"
+    disks           = ["sda", "sdb"]
+    zfs_ashift      = 12
+    nic_filter      = { "ID_NET_NAME" = "eno1" }
+  }
+  node02 = {
+    management_cidr = "10.0.0.12/24"
+    filesystem      = "zfs"
+    zfs_raid        = "raid1"
+    disks           = ["sda", "sdb"]
+  }
+  node03 = {
+    management_cidr = "10.0.0.13/24"
+    filesystem      = "zfs"
+    zfs_raid        = "raid1"
+    disks           = ["sda", "sdb"]
+  }
+}
+
+# Optional: notify an HTTP endpoint after each installation finishes.
+# Its bearer token comes from the Vault field post_installation_webhook_token.
+# post_installation_webhook = {
+#   url = "https://pdm.example.com/api/install-callback"
+# }
+
+# Container running proxmox-auto-install-assistant (proxmox_auto_install_assistant_container).
+container_engine             = "docker"
+container_platform           = "" # "linux/amd64" on Apple Silicon
+auto_install_assistant_image = "proxmox-auto-install-assistant:latest"
+
+###############################################################################
+# Phase 2 (after nodes are installed and clustered):
+###############################################################################
+
+pve_endpoint = "https://10.0.0.11:8006/"
+manage_pve_resources = true
+
+cluster_options = {
+  keyboard       = "en-us"
+  email_from     = "proxmox@example.lan"
+  migration_type = "secure"
+  next_id_lower  = 100
+  next_id_upper  = 999999
+}
+
+# Issue per-node TLS certificates from Vault PKI and install them on the nodes.
+node_tls_enabled    = true
+vault_pki_backend   = "pki_int"
+vault_pki_role      = "proxmox-node"
+vault_pki_ttl       = "8760h"
+
+###############################################################################
+# Phase 3: manage the cluster as a remote in Proxmox Datacenter Manager
+# through its REST API.
+###############################################################################
+
+pdm_enabled  = true
+pdm_api_url  = "https://10.0.0.2:8007" # PDM REST API base URL
+pdm_web_url  = "https://10.0.0.2:8007"
+pdm_verify_nodes = true

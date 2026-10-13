@@ -1,0 +1,25 @@
+# Terraform / OpenTofu state
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Variables containing secrets
+*.tfvars
+!*.tfvars.example
+
+# Generated bootstrap artifacts (contain root passwords / hooks)
+build/
+
+# Editor noise
+.idea/
+.vscode/
+*.swp
+.DS_Store
