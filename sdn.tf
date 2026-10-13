@@ -137,19 +137,28 @@ resource "proxmox_sdn_subnet" "subnets" {
   }
 }
 
+# The applier below only acts on create/destroy, so re-running it after a
+# configuration change requires replacing it. replace_triggered_by must be a
+# static list, and whole-collection references to zero-instance resources fail
+# the plan with "no change found" (e.g. when only vlan zones are declared) —
+# so the replacement is routed through this marker instead: it always exists
+# while the applier does, and its input captures every declared SDN change.
+resource "terraform_data" "sdn_activation" {
+  count = var.manage_pve_resources && var.sdn_apply ? 1 : 0
+
+  input = sha512(jsonencode({
+    zones   = var.sdn_zones
+    vnets   = var.sdn_vnets
+    subnets = var.sdn_subnets
+  }))
+}
+
 resource "proxmox_sdn_applier" "apply" {
   count = var.manage_pve_resources && var.sdn_apply ? 1 : 0
 
   # Activates everything staged in this apply round.
   lifecycle {
-    replace_triggered_by = [
-      proxmox_sdn_zone_simple.zones,
-      proxmox_sdn_zone_vlan.zones,
-      proxmox_sdn_zone_vxlan.zones,
-      proxmox_sdn_zone_evpn.zones,
-      proxmox_sdn_vnet.vnets,
-      proxmox_sdn_subnet.subnets,
-    ]
+    replace_triggered_by = [terraform_data.sdn_activation[0]]
   }
 
   depends_on = [

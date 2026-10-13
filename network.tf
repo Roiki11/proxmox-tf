@@ -63,6 +63,7 @@ locals {
     [for _, b in var.network_bonds : b.node_name],
     [for _, v in var.network_vlans : v.node_name],
   )) : []
+
 }
 
 resource "proxmox_network_applier" "nodes" {

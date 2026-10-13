@@ -178,16 +178,27 @@ registration script verifies the effective TLS trust instead.
 
 ## Variables
 
-See the commented `variables*.tf` files and `examples/terraform.tfvars.example` for the
-full list. Key ones: `cluster_name`, `nodes`, `node_defaults`, `bootstrap_node`,
-`pve_iso_url`, `auto_install_assistant_image`, `container_*`, `pve_*` (API access),
-`manage_pve_resources`, `node_tls_enabled`, `vault_*` (KV mount/path, PKI backend/role),
-`pdm_*` (REST API URL and remote options).
+Every variable — type, default and description — is documented in
+[`docs/VARIABLES.md`](docs/VARIABLES.md) (the `variables*.tf` files remain the
+source of truth and carry the per-field docs for the complex map variables).
 
-**Secrets**: none in configuration — see `vault.tf` for the expected Vault KV-v2
+Ready-to-copy example configurations live in
+[`examples/`](examples/README.md):
+
+- [`terraform.tfvars.example`](examples/terraform.tfvars.example) — complete
+  3-node cluster walkthrough across all phases (start here)
+- [`minimal.tfvars.example`](examples/minimal.tfvars.example) — smallest viable
+  single-node setup
+- [`three-node-ha.tfvars.example`](examples/three-node-ha.tfvars.example) —
+  production-shaped HA stack (bonds, SDN, Ceph, PBS, PDM)
+
+**Secrets**: none in configuration — see `vault.tf` and the
+[secrets table](docs/VARIABLES.md#secrets) for the expected Vault KV-v2
 fields (`root_password`, `root_password_hashed`, `pve_password`, `pve_api_token`,
 `subscription_key`, `post_installation_webhook_token`, `pdm_password`,
-`pdm_api_token`, `pdm_remote_token`, `pdm_remote_authid`).
+`pdm_api_token`, `pdm_remote_token`, `pdm_remote_authid`, plus per-node
+`bmc_<node>_password` and per-storage `storage_<id>_password` /
+`storage_<id>_encryption_key` fields).
 
 ## Outputs
 

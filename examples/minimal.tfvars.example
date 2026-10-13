@@ -1,0 +1,45 @@
+# Minimal example — one standalone node, no Redfish/BMC flow, no cluster.
+#
+# Use this to try the pipeline end to end: `make init && make isos`, then
+# burn/attach build/iso/pve1-auto.iso and boot the machine. The installer
+# provisions the node and (cluster_bootstrap_enabled = false) leaves it
+# standalone. Cluster + phase 2/3 can be layered in later (see
+# terraform.tfvars.example).
+#
+# Copy to terraform.tfvars (gitignored) and adapt.
+#
+# SECRETS: the root password is read from the Vault KV-v2 secret
+# (field 'root_password', optionally 'root_password_hashed' — see vault.tf).
+
+cluster_name   = "standalone" # max 15 chars (PVE node-name rules)
+cluster_domain = "lab.internal"
+
+# No clustering: nodes install standalone and are not joined automatically.
+cluster_bootstrap_enabled = false
+
+root_ssh_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... you@host",
+]
+
+# Single disk, ext4, static management address.
+node_defaults = {
+  gateway    = "10.0.0.1"
+  dns_server = "10.0.0.1"
+  filesystem = "ext4"
+  disks      = ["sda"]
+  nic_filter = { "ID_NET_NAME" = "eno1" } # pick the NIC by udev name
+}
+
+nodes = {
+  pve1 = {
+    management_cidr = "10.0.0.11/24"
+  }
+}
+
+# Base PVE ISO: downloaded automatically on first `make isos` if missing.
+pve_iso_url = "https://download.proxmox.com/iso/proxmox-ve_9.2-1.iso"
+
+# Apple Silicon? Set container_platform = "linux/amd64".
+
+# Not used in this minimal setup (see terraform.tfvars.example):
+# iso_http_base_url, node_install_*, manage_pve_resources, pdm_enabled.

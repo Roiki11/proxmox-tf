@@ -1,0 +1,278 @@
+# Full-featured 3-node HA cluster — production-shaped example.
+#
+# Differences from terraform.tfvars.example (the simpler walkthrough):
+#   - redundant networking per node: LACP bond + VLAN-aware guest bridge
+#   - overlay networks via SDN (VLAN zone + VXLAN zone)
+#   - Ceph pools (hyper-converged storage) and a dedicated backup target
+#   - node TLS certificates from Vault PKI + PDM registration and node config
+#
+# Start from terraform.tfvars.example for the basics; this file highlights
+# the HA additions. Copy to terraform.tfvars (gitignored) and adapt.
+#
+# Variable reference: docs/VARIABLES.md
+
+cluster_name   = "prod"
+cluster_domain = "example.lan"
+bootstrap_node = "node01"
+
+root_ssh_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... you@host",
+]
+
+node_defaults = {
+  gateway    = "10.0.0.1"
+  dns_server = "10.0.0.1"
+  timezone   = "UTC"
+  filesystem = "zfs"
+  zfs_raid   = "raid1"
+  disks      = ["sda", "sdb"] # system disks; Ceph OSDs live on separate disks
+  zfs_ashift = 12
+}
+
+iso_http_base_url = "http://10.0.0.1:8080"
+
+node_install_enabled    = true
+node_install_reset_type = "PowerCycle"
+
+nodes = {
+  node01 = {
+    management_cidr = "10.0.0.11/24"
+    bmc = { address = "https://10.0.0.201" }
+  }
+  node02 = {
+    management_cidr = "10.0.0.12/24"
+    bmc = { address = "https://10.0.0.202" }
+  }
+  node03 = {
+    management_cidr = "10.0.0.13/24"
+    bmc = { address = "https://10.0.0.203" }
+  }
+}
+
+###############################################################################
+# Phase 2: live cluster management
+###############################################################################
+
+pve_endpoint         = "https://10.0.0.11:8006/"
+manage_pve_resources = true
+
+cluster_options = {
+  email_from     = "proxmox@example.lan"
+  migration_type = "secure"
+  migration_cidr = "10.1.0.0/24" # dedicated migration network
+  mac_prefix     = "BC:24:11"
+  next_id_lower  = 100
+  next_id_upper  = 999999
+}
+
+cluster_dns_servers = ["1.1.1.1"]
+
+# Node certificates from Vault PKI (also consumed by the PDM host, so remotes
+# connect without TLS fingerprint pinning).
+node_tls_enabled  = true
+vault_pki_backend = "pki_int"
+vault_pki_role    = "proxmox-node"
+vault_pki_ttl     = "8760h"
+
+# Redundant per-node networking: a bond for the mgmt/guest uplink and a
+# VLAN-aware guest bridge on top of it. Interfaces are staged and activated
+# per node by the network applier.
+network_bonds = {
+  "node01-bond0" = {
+    node_name             = "node01"
+    name                  = "bond0"
+    slaves                = ["eno1", "eno2"]
+    bond_mode             = "802.3ad"
+    bond_xmit_hash_policy = "layer3+4"
+  }
+  "node02-bond0" = {
+    node_name             = "node02"
+    name                  = "bond0"
+    slaves                = ["eno1", "eno2"]
+    bond_mode             = "802.3ad"
+    bond_xmit_hash_policy = "layer3+4"
+  }
+  "node03-bond0" = {
+    node_name             = "node03"
+    name                  = "bond0"
+    slaves                = ["eno1", "eno2"]
+    bond_mode             = "802.3ad"
+    bond_xmit_hash_policy = "layer3+4"
+  }
+}
+
+network_bridges = {
+  "node01-vmbr1" = {
+    node_name  = "node01"
+    name       = "vmbr1"
+    ports      = ["bond0"]
+    vlan_aware = true
+    vids       = "2-4094"
+    comment    = "guest bridge"
+  }
+  "node02-vmbr1" = {
+    node_name  = "node02"
+    name       = "vmbr1"
+    ports      = ["bond0"]
+    vlan_aware = true
+    vids       = "2-4094"
+    comment    = "guest bridge"
+  }
+  "node03-vmbr1" = {
+    node_name  = "node03"
+    name       = "vmbr1"
+    ports      = ["bond0"]
+    vlan_aware = true
+    vids       = "2-4094"
+    comment    = "guest bridge"
+  }
+}
+
+network_vlans = {
+  # Explicit VLAN subinterface carrying the cluster/migration VLAN.
+  "node01-migration" = {
+    node_name = "node01"
+    name      = "bond0.21"
+    interface = "bond0"
+    vlan      = 21
+    address   = "10.1.0.11/24"
+  }
+  "node02-migration" = {
+    node_name = "node02"
+    name      = "bond0.21"
+    interface = "bond0"
+    vlan      = 21
+    address   = "10.1.0.12/24"
+  }
+  "node03-migration" = {
+    node_name = "node03"
+    name      = "bond0.21"
+    interface = "bond0"
+    vlan      = 21
+    address   = "10.1.0.13/24"
+  }
+}
+
+# SDN: a VLAN zone for tenant networks plus a VXLAN overlay spanning all
+# nodes. VNets attach to zones, subnets to VNets; the applier activates
+# staged changes (sdn_apply = true).
+sdn_zones = {
+  "vlan1" = {
+    type   = "vlan"
+    bridge = "vmbr1"
+    ipam   = "pve"
+  }
+  "vxlan1" = {
+    type  = "vxlan"
+    mtu   = 1450 # underlay MTU minus VXLAN overhead
+    peers = ["10.0.0.11", "10.0.0.12", "10.0.0.13"]
+    ipam  = "pve"
+  }
+}
+
+sdn_vnets = {
+  "vnet10"  = { zone = "vlan1", tag = 10 }
+  "vnet20"  = { zone = "vlan1", tag = 20 }
+  "overlay" = { zone = "vxlan1" }
+}
+
+sdn_subnets = {
+  "vnet10-subnet" = {
+    vnet    = "vnet10"
+    cidr    = "10.10.10.0/24"
+    gateway = "10.10.10.1"
+    snat    = true
+  }
+  "vnet20-subnet" = {
+    vnet            = "vnet20"
+    cidr            = "10.10.20.0/24"
+    gateway         = "10.10.20.1"
+    snat            = true
+    dhcp_dns_server = "10.10.20.53"
+    dns_zone_prefix = "20.10.10.10.in-addr.arpa"
+  }
+  "overlay-subnet" = {
+    vnet    = "overlay"
+    cidr    = "10.20.0.0/16"
+    gateway = "10.20.0.1"
+    snat    = true
+  }
+}
+
+# Ceph: initialize the cluster once (e.g. `pveceph init` on node01 + OSDs via
+# the UI), then declare pools here. add_storages creates the RBD storage.
+ceph_pools = {
+  "rbd-vm" = {
+    size         = 3
+    min_size     = 2
+    pg_num       = 128
+    application  = "rbd"
+    add_storages = true
+  }
+  "rbd-k8s" = {
+    size              = 3
+    min_size          = 2
+    pg_num            = 64
+    pg_autoscale_mode = "on"
+    application       = "rbd"
+  }
+}
+
+# Storage: shared ISO store plus a PBS backup target (credentials from Vault).
+storage_directories = {
+  "iso-store" = {
+    path    = "/tank/iso"
+    content = ["iso"]
+    shared  = true
+  }
+}
+
+storage_pbs = {
+  "backup" = {
+    server      = "10.0.0.9"
+    datastore   = "pve"
+    username    = "pve@pbs"
+    fingerprint = "AA:BB:CC:..." # PBS certificate fingerprint
+    # PBS password + optional encryption key come from Vault:
+    # 'storage_backup_password', 'storage_backup_encryption_key'
+  }
+}
+
+###############################################################################
+# Phase 3: Proxmox Datacenter Manager
+###############################################################################
+
+pdm_enabled      = true
+pdm_api_url      = "https://10.0.0.2:8007"
+pdm_web_url      = "https://10.0.0.2:8007"
+pdm_verify_nodes = true
+
+pdm_node_config = {
+  node01 = {
+    apt_update = true
+    firewall_options = {
+      enable                   = true
+      log_level_in             = "info"
+      protection_synflood      = true
+      protection_synflood_rate = 200
+    }
+  }
+  node02 = {
+    apt_update = true
+    firewall_options = {
+      enable              = true
+      log_level_in        = "info"
+      nftables            = false
+      protection_synflood = true
+    }
+  }
+  node03 = {
+    apt_update = true
+    firewall_options = {
+      enable       = true
+      log_level_in = "info"
+      nosmurfs     = true
+      tcpflags     = true
+    }
+  }
+}

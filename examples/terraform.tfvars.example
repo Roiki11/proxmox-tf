@@ -1,97 +1,162 @@
-# Example configuration for the proxmox-tf project.
+# Example configuration for the proxmox-tf project — a 3-node HA cluster.
+#
 # Copy to terraform.tfvars (gitignored) and adapt.
+#
+# Phases (all configured in this one file; enable them as you go):
+#   1   — ISO build + automated installation (always on)
+#   1.5 — machine installation via Redfish (node bmc blocks + node_install_*)
+#   2   — live cluster management (manage_pve_resources)
+#   3   — Proxmox Datacenter Manager (pdm_enabled)
+#
+# More examples in this directory (see examples/README.md):
+#   minimal.tfvars.example        — smallest viable single-node setup
+#   three-node-ha.tfvars.example  — full HA stack (bonds, SDN, Ceph, PBS, PDM)
+#
+# Variable reference with types and defaults: docs/VARIABLES.md
 #
 # SECRETS: no secrets belong in this file. All credentials are read from a
 # HashiCorp Vault KV-v2 secret (see vault.tf for the expected fields). The
 # Vault provider authenticates via the VAULT_ADDR / VAULT_TOKEN environment
 # variables (or add an auth_login_* block in providers.tf).
 
-cluster_name   = "lab"
-cluster_domain = "example.lan"
-bootstrap_node = "node01"
+###############################################################################
+# Phase 1: cluster identity + automated installation
+###############################################################################
 
+cluster_name   = "lab"     # max 15 chars (PVE node-name rules)
+cluster_domain = "example.lan"
+bootstrap_node = "node01"  # creates the cluster; the others join on first boot
+
+# SSH public keys added to root's authorized_keys on every installed node.
 root_ssh_keys = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... you@host",
 ]
 
+# Installer locale/mirror settings.
 keyboard = "en-us"
-country  = "us"
-mailto   = "admin@example.lan"
+country  = "us" # two-letter country code selecting a nearby package mirror
+# mailto = "admin@example.lan" # default mail address for the root user
+
+# Defaults applied to every node in `nodes` (per-node values win) — keeps the
+# nodes map short. Every field can be overridden per node; see variables.tf.
+node_defaults = {
+  gateway    = "10.0.0.1"
+  dns_server = "10.0.0.1"
+  timezone   = "Europe/Amsterdam"
+  filesystem = "zfs"
+  zfs_raid   = "raid1"
+  disks      = ["sda", "sdb"]
+  zfs_ashift = 12
+  nic_filter = { "ID_NET_NAME" = "eno1" } # udev match for the management NIC
+  # Other accepted fields (defaults shown):
+  # dhcp         = false                       # DHCP instead of a static CIDR
+  # zfs_arc_max  = 8192                        # MiB
+  # lvm_hdsize   = 220                         # GiB (ext4/xfs only)
+  # lvm_swapsize = 8                           # GiB (ext4/xfs only)
+  # disk_filter  = { "ID_SERIAL" = "KIOXIA*" } # udev disk match (then set disks = [])
+  # filter_match = "any"                       # or "all"
+}
 
 # Base PVE ISO: downloaded automatically on first `make isos` if missing.
 pve_iso_url      = "https://download.proxmox.com/iso/proxmox-ve_9.2-1.iso"
 pve_iso_checksum = "" # optional; changing it rebuilds all ISOs
 
-# Base URL serving build/iso over HTTP for Redfish virtual media boot
+# Base URL serving build/iso over HTTP for Redfish virtual media
 # (start with `make iso-serve`; must be reachable from the BMCs).
 iso_http_base_url = "http://10.0.0.1:8080"
 
-# Machine installation via the dell/redfish provider (redfish.tf): attaches
-# the ISO as virtual media, arms a one-time boot and resets/powers the
-# machine — only for nodes whose PVE API does not answer yet.
-node_install_enabled       = true
-node_install_reset_type    = "PowerCycle" # powers on machines that are off
-node_install_power_on      = true
-redfish_ssl_insecure       = true
+# Machine installation via the dell/redfish provider (redfish.tf): for every
+# node below that has a bmc block and whose PVE API does not answer yet, the
+# ISO is attached as virtual media, a one-time boot is armed and the machine
+# is powered on. Requires BMC passwords in Vault (field bmc_<node>_password).
+# `make node-install` forces this flag for its run.
+node_install_enabled    = true
+node_install_reset_type = "PowerCycle" # also powers on machines that are off
+node_install_power_on   = true
+redfish_ssl_insecure    = true
+
+###############################################################################
+# Phase 1: the nodes - 3 nodes (HA quorum; 2 nodes would need a QDevice).
+#
+# The map key becomes the node hostname (lowercase, no dots) and the node's
+# ISO name: build/iso/<key>-auto.iso. node_defaults fill any gaps.
+###############################################################################
 
 nodes = {
+  # node01 - bootstrap node; shows every commonly used node field.
   node01 = {
-    # Bootstrap node: creates the cluster on first boot.
     management_cidr = "10.0.0.11/24"
-    gateway         = "10.0.0.1"
-    dns_server      = "10.0.0.1"
-    filesystem      = "zfs"
-    zfs_raid        = "raid1"
-    disks           = ["sda", "sdb"]
-    zfs_ashift      = 12
-    nic_filter      = { "ID_NET_NAME" = "eno1" }
-    # BMC for Redfish boot tasks (password from Vault field
-    # 'bmc_node01_password'; install with `make node-install REDFISH_NODE=node01`).
+    # All fields below come from node_defaults - listed for reference:
+    # gateway     = "10.0.0.1"
+    # dns_server  = "10.0.0.1"
+    # timezone    = "Europe/Amsterdam"
+    # filesystem  = "zfs"
+    # zfs_raid    = "raid1"
+    # disks       = ["sda", "sdb"]
+    # zfs_ashift  = 12
+    # zfs_arc_max = 8192 # MiB
+    # dhcp        = true # DHCP instead of the static CIDR above
+    # BMC for Redfish installation/power tasks (phase 1.5). The password comes
+    # from the Vault field 'bmc_node01_password' (default naming); install
+    # with `make node-install REDFISH_NODE=node01`.
     bmc = {
-      address = "https://10.0.0.201"
+      address  = "https://10.0.0.201"
+      username = "root" # default
+      # password_vault_field = "idrac_root_pw" # non-default Vault field
+      boot_target = "Cd" # one-time boot target (iDRAC default; vendor-specific)
     }
   }
+
+  # node02 - ext4 with explicit sizing and udev-based disk selection.
+  # NOTE: disks MUST be emptied when disk_filter is used - the installer
+  # forbids defining both.
   node02 = {
     management_cidr = "10.0.0.12/24"
-    filesystem      = "zfs"
-    zfs_raid        = "raid1"
-    disks           = ["sda", "sdb"]
+    filesystem      = "ext4"
+    disks           = []
+    disk_filter     = { "ID_SERIAL" = "KIOXIA*" }
+    filter_match    = "any" # or "all"
+    lvm_hdsize      = 220 # GiB reserved at the end of the disk
+    lvm_swapsize    = 16  # GiB
     bmc = {
-      address  = "https://10.0.0.202"
-      username = "root"
+      address = "https://10.0.0.202"
     }
   }
+
+  # node03 - ZFS RAID-10 across four disks.
   node03 = {
     management_cidr = "10.0.0.13/24"
     filesystem      = "zfs"
-    zfs_raid        = "raid1"
-    disks           = ["sda", "sdb"]
+    zfs_raid        = "raid10"
+    disks           = ["sda", "sdb", "sdc", "sdd"]
+    zfs_ashift      = 12
     bmc = {
-      address     = "https://10.0.0.203"
-      # Vendor-specific one-time boot source override target, if "Cd" is wrong:
-      boot_target = "Cd"
+      address = "https://10.0.0.203"
     }
   }
 }
 
-# Optional: notify an HTTP endpoint after each installation finishes.
-# Its bearer token comes from the Vault field post_installation_webhook_token.
+# Optional: notify an HTTP endpoint after each installation finishes. Its
+# bearer token comes from the Vault field post_installation_webhook_token.
 # post_installation_webhook = {
-#   url = "https://pdm.example.com/api/install-callback"
+#   url              = "https://hooks.example.lan/proxmox-installed"
+#   cert_fingerprint = "AA:BB:CC:..." # pin the endpoint certificate (optional)
 # }
 
-# Container running proxmox-auto-install-assistant (proxmox_auto_install_assistant_container).
+# Container running proxmox-auto-install-assistant (ISO generation).
 container_engine             = "docker"
 container_platform           = "" # "linux/amd64" on Apple Silicon
 auto_install_assistant_image = "proxmox-auto-install-assistant:latest"
 
 ###############################################################################
-# Phase 2 (after nodes are installed and clustered):
+# Phase 2: live cluster management (enable once the nodes are installed and
+# clustered — verify with: ssh root@10.0.0.11 'pvecm status').
 ###############################################################################
 
-pve_endpoint = "https://10.0.0.11:8006/"
-manage_pve_resources = true
+pve_endpoint          = "https://10.0.0.11:8006/"
+manage_pve_resources  = true
 
+# Datacenter options (see variables-management.tf for all fields).
 cluster_options = {
   keyboard       = "en-us"
   email_from     = "proxmox@example.lan"
@@ -100,33 +165,40 @@ cluster_options = {
   next_id_upper  = 999999
 }
 
-# Issue per-node TLS certificates from Vault PKI and install them on the nodes.
-node_tls_enabled    = true
-vault_pki_backend   = "pki_int"
-vault_pki_role      = "proxmox-node"
-vault_pki_ttl       = "8760h"
+# Additional DNS servers for /etc/resolv.conf on every node (the per-node
+# dns_server is always first).
+cluster_dns_servers = ["1.1.1.1", "8.8.8.8"]
+
+# Issue per-node TLS certificates from Vault PKI and install them on the
+# nodes (replaces the self-signed pveproxy certs). The PKI role must allow
+# the node FQDNs; see variables-management.tf for the knobs.
+node_tls_enabled  = true
+vault_pki_backend = "pki_int"
+vault_pki_role    = "proxmox-node"
+vault_pki_ttl     = "8760h"
 
 ###############################################################################
-# Direct cluster configuration (phase 2): storage, network, SDN and Ceph,
-# managed via the bpg/proxmox provider. Apply selectively:
-#   make pve-storage | pve-network | pve-sdn | pve-ceph
+# Phase 2: storage, network, SDN and Ceph (bpg/proxmox provider).
+# Apply selectively with: make pve-storage | pve-network | pve-sdn | pve-ceph
 ###############################################################################
 
-# Storage definitions (keyed by storage ID).
+# Directory storage on all three nodes.
 storage_directories = {
   "iso-store" = {
-    path     = "/tank/iso"
-    content  = ["iso"]
-    nodes    = ["node01", "node02", "node03"]
-    shared   = true
+    path             = "/tank/iso"
+    content          = ["iso"]
+    nodes            = ["node01", "node02", "node03"]
+    shared           = true
     create_base_path = true
     create_subdirs   = true
     backups = {
-      keep_daily = 7
+      keep_daily            = 7
       max_protected_backups = 5
     }
   }
 }
+
+# ZFS pool storage.
 storage_zfspool = {
   "fast-pool" = {
     zfs_pool       = "rpool/fast"
@@ -135,28 +207,66 @@ storage_zfspool = {
     thin_provision = true
   }
 }
-# storage_lvm = { ... volume_group, thin_pool (lvmthin) ... }
-# storage_nfs = { ... server, export ... }
-# storage_cifs = { ... server, share, username ... SMB password from Vault
-#                  field 'storage_<id>_password' }
-# storage_pbs = { ... server, datastore, username, fingerprint ... PBS
-#                 password from Vault field 'storage_<id>_password' }
 
-# Node network interfaces (staged, then activated by the per-node applier).
+# Other storage types (commented examples — see variables-storage.tf):
+# storage_lvm     = { "lvm-vm" = { volume_group = "vg0" } }
+# storage_lvmthin = { "thin-vm" = { volume_group = "vg0", thin_pool = "thin" } }
+# storage_nfs  = { "nas" = { server = "10.0.0.9", export = "/export/vm",
+#                            content = ["images", "iso"] } }
+# storage_cifs = { "nas-smb" = { server = "10.0.0.9", share = "vm",
+#                                username = "proxmox" } # SMB password from
+#                                # the Vault field 'storage_nas-smb_password'
+# storage_pbs  = { "backup" = { server = "10.0.0.9", datastore = "pve",
+#                               username = "pve@pbs", fingerprint = "AA:..." } }
+#                              # password from 'storage_backup_password',
+#                              # optional encryption key from
+#                              # 'storage_backup_encryption_key'
+
+# Node network interfaces (staged, then activated together per node by the
+# network applier; see variables-network.tf).
 network_bridges = {
+  # A second bridge for guest traffic, VLAN-aware.
   "node01-vmbr1" = {
-    node_name = "node01"
-    name      = "vmbr1"
-    ports     = ["eno1"]
+    node_name  = "node01"
+    name       = "vmbr1"
+    ports      = ["eno1"]
     vlan_aware = true
-    vids      = "2-4094"
-    comment   = "guest bridge"
+    vids       = "2-4094"
+    comment    = "guest bridge"
+  }
+  "node02-vmbr1" = {
+    node_name  = "node02"
+    name       = "vmbr1"
+    ports      = ["eno1"]
+    vlan_aware = true
+    vids       = "2-4094"
+    comment    = "guest bridge"
+  }
+  "node03-vmbr1" = {
+    node_name  = "node03"
+    name       = "vmbr1"
+    ports      = ["eno1"]
+    vlan_aware = true
+    vids       = "2-4094"
+    comment    = "guest bridge"
   }
 }
-# network_bonds = { ... slaves, bond_mode ... }
-# network_vlans = { ... name 'eno1.99' or custom name + interface + vlan ... }
+# Bonds and VLAN interfaces work the same way:
+# network_bonds = {
+#   "node01-bond0" = {
+#     node_name = "node01"
+#     name      = "bond0"
+#     slaves    = ["eno1", "eno2"]
+#     bond_mode = "802.3ad"
+#     bond_xmit_hash_policy = "layer3+4"
+#   }
+# }
+# network_vlans = {
+#   "node01-mgmt99" = { node_name = "node01", name = "eno1.99" }
+# }
 
-# SDN: zones -> VNets -> subnets; changes are applied by the SDN applier.
+# SDN: zones -> VNets -> subnets; changes are staged and activated by the SDN
+# applier (sdn_apply = true). Zone types: simple | vlan | vxlan | evpn.
 sdn_zones = {
   "vlan1" = {
     type   = "vlan"
@@ -172,36 +282,49 @@ sdn_vnets = {
 }
 sdn_subnets = {
   "vnet10-subnet" = {
-    vnet     = "vnet10"
-    cidr     = "10.10.10.0/24"
-    gateway  = "10.10.10.1"
-    snat     = true
+    vnet    = "vnet10"
+    cidr    = "10.10.10.0/24"
+    gateway = "10.10.10.1"
+    snat    = true
   }
 }
-# sdn_zones type 'vxlan' takes peers = node IPs; 'evpn' takes controller +
-# vrf_vxlan. Requires an existing bridge for vlan zones.
+# Overlay networks (commented examples):
+# sdn_zones = {
+#   "vxlan1" = { type = "vxlan", bridge = "vmbr0",
+#                peers = ["10.0.0.11", "10.0.0.12", "10.0.0.13"] }
+#   "evpn1"  = { type = "evpn", bridge = "vmbr0", controller = "10.0.0.11",
+#                vrf_vxlan = 1, advertise_subnets = true }
+# }
 
-# Ceph pools (declare after Ceph is initialized on the cluster; pools only —
-# monitors/OSDs are not managed by the provider).
+# Ceph pools (declare after Ceph is initialized on the cluster; the provider
+# manages pools only — monitors/OSDs are set up manually or via cephadm).
 # ceph_pools = {
 #   "tank" = {
-#     size     = 3
-#     min_size = 2
-#     pg_num   = 128
-#     application = "rbd"
+#     size         = 3
+#     min_size     = 2
+#     pg_num       = 128
+#     application  = "rbd"
 #     add_storages = true
 #   }
 # }
 
 ###############################################################################
 # Phase 3: manage the cluster as a remote in Proxmox Datacenter Manager
-# through its REST API.
+# through its REST API. Credentials from the Vault fields pdm_password
+# (or pdm_api_token); see variables-management.tf for the pdm_* options.
 ###############################################################################
 
-pdm_enabled  = true
-pdm_api_url  = "https://10.0.0.2:8007" # PDM REST API base URL
-pdm_web_url  = "https://10.0.0.2:8007"
-pdm_verify_nodes = true
+pdm_enabled      = true
+pdm_api_url      = "https://10.0.0.2:8007" # PDM REST API base URL
+pdm_web_url      = "https://10.0.0.2:8007"
+pdm_verify_nodes = true # probe node certs after registration
+
+# By default this project creates a dedicated PVE user (pdm@pve) and API token
+# for the remote; alternatively provide the Vault fields pdm_remote_token /
+# pdm_remote_authid to reuse a pre-existing one:
+# pdm_user_id  = "pdm@pve"   # created on the cluster when no remote token given
+# pdm_token_name = "pdm"
+# pdm_acl_role = "Administrator" # role granted on '/'
 
 # Node configuration applied through the PDM REST API (see variables-pdm.tf).
 # Writable through PDM: APT database updates and node firewall options.
@@ -209,14 +332,20 @@ pdm_node_config = {
   node01 = {
     apt_update = true
     firewall_options = {
-      enable           = true
-      log_level_in     = "info"
-      nftables         = false
+      enable              = true
+      log_level_in        = "info"
+      nftables            = false
       protection_synflood = true
     }
   }
   node02 = {
     apt_update = true
+  }
+  node03 = {
+    apt_update = true
+    firewall_options = {
+      enable = true
+    }
   }
 }
 
