@@ -6,7 +6,8 @@ TF := $(if $(TOFU),tofu,$(if $(TERRAFORM),terraform,$(error neither tofu nor ter
 .PHONY: help init fmt validate isos plan apply destroy clean \
 	pdm-node-apply pdm-node-status pdm-node-config pdm-node-network \
 	pdm-node-updates pdm-node-repositories pdm-node-subscription \
-	pdm-node-storage pdm-node-apt-update pdm-updates-refresh pdm-updates-summary
+	pdm-node-storage pdm-node-apt-update pdm-updates-refresh pdm-updates-summary \
+	pve-storage pve-network pve-sdn pve-ceph
 
 # PDM CLI tasks read their connection settings from the environment
 # (PDM_API_URL, PDM_API_USER/PDM_API_PASSWORD or PDM_API_TOKEN, and optionally
@@ -83,3 +84,33 @@ pdm-updates-refresh: ## Refresh PDM's cached update summary for all remotes
 
 pdm-updates-summary: ## Show PDM's cached update summary for all remotes
 	@PDM_REMOTE_ID="$(PDM_REMOTE_ID)" ./scripts/manage-pdm-node.sh updates-summary
+
+
+# --- Direct cluster configuration tasks (bpg/proxmox; NODE-scoped resources) ---
+
+pve-storage: ## Declare/apply storage definitions on the cluster (variables-storage.tf)
+	$(TF) apply -target=proxmox_storage_directory.storage \
+		-target=proxmox_storage_lvm.storage \
+		-target=proxmox_storage_lvmthin.storage \
+		-target=proxmox_storage_zfspool.storage \
+		-target=proxmox_storage_nfs.storage \
+		-target=proxmox_storage_cifs.storage \
+		-target=proxmox_storage_pbs.storage
+
+pve-network: ## Declare/apply node network interfaces + reload applier (variables-network.tf)
+	$(TF) apply -target=proxmox_network_linux_vlan.vlans \
+		-target=proxmox_network_linux_bond.bonds \
+		-target=proxmox_network_linux_bridge.bridges \
+		-target=proxmox_network_applier.nodes
+
+pve-sdn: ## Declare/apply SDN zones, VNets, subnets + applier (variables-sdn.tf)
+	$(TF) apply -target=proxmox_sdn_zone_simple.zones \
+		-target=proxmox_sdn_zone_vlan.zones \
+		-target=proxmox_sdn_zone_vxlan.zones \
+		-target=proxmox_sdn_zone_evpn.zones \
+		-target=proxmox_sdn_vnet.vnets \
+		-target=proxmox_sdn_subnet.subnets \
+		-target=proxmox_sdn_applier.apply
+
+pve-ceph: ## Declare/apply Ceph pools (variables-ceph.tf)
+	$(TF) apply -target=proxmox_ceph_pool.pools

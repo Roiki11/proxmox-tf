@@ -25,6 +25,12 @@ Terraform/OpenTofu project that bootstraps **Proxmox VE clusters** end-to-end:
    (`/pve/remotes/{remote}/nodes/{node}/...`), with Makefile tasks for
    inspecting node status, network, storage, repositories, subscription and
    pending updates.
+8. **Direct cluster configuration** — storage definitions (directory, LVM,
+   thin LVM, ZFS, NFS, CIFS, PBS), node network interfaces (bridges, bonds,
+   VLANs with staged-change applier), SDN (zones, VNets, subnets, apply) and
+   Ceph pools are managed declaratively through the `bpg/proxmox` provider,
+   applied with `make pve-storage`, `make pve-network`, `make pve-sdn` or
+   `make pve-ceph`.
 
 ```
                        ┌────────────────────────────────────────────┐
@@ -183,6 +189,33 @@ fields (`root_password`, `root_password_hashed`, `pve_password`, `pve_api_token`
 `node_isos`, `node_answer_files`, `node_first_boot_hooks`, `bootstrap_node`,
 `installation_instructions`, `pve_nodes`, `node_certificates`, `secrets_source`,
 `pdm_remote_id`, `pdm_authid`.
+
+## Direct cluster configuration (phase 2)
+
+Everything below is declared in `variables-storage.tf`, `variables-network.tf`,
+`variables-sdn.tf` and `variables-ceph.tf`, managed through the `bpg/proxmox`
+provider, and gated by `manage_pve_resources`. Apply everything (`make apply`)
+or per area:
+
+| Task | Contents |
+| --- | --- |
+| `make pve-storage` | Directory, LVM, thin-LVM, ZFS, NFS, CIFS and PBS storages (keyed by storage ID; optional backup retention blocks) |
+| `make pve-network` | Per-node bridges, bonds and VLAN interfaces — staged by default (`reload = false`) and activated in one reload per node by `proxmox_network_applier` whenever any managed interface changes |
+| `make pve-sdn` | SDN zones (`simple`/`vlan`/`vxlan`/`evpn`), VNets and subnets, activated by `proxmox_sdn_applier` when `sdn_apply = true` |
+| `make pve-ceph` | Ceph pools (size/min_size, PG settings, CRUSH rule, erasure coding, `add_storages`) |
+
+Referencing rules are validated: VNets must reference declared zones, subnets
+must reference declared VNets, and per-node fields (`node_name`, bridge
+ports, applier nodes) must match `var.nodes`. CIFS/PBS credentials come from
+the Vault secret (fields `storage_<id>_password` and
+`storage_<id>_encryption_key`, override with `password_vault_field` /
+`encryption_key_vault_field`).
+
+Notes:
+- Ceph pools only: the provider does not deploy monitors/OSDs — initialize
+  Ceph on a node first (e.g. `pveceph init`), then declare pools.
+- The network/SDN appliers are experimental in the provider; pin the provider
+  version (the lockfile does).
 
 ## Node configuration through PDM (phase 3)
 

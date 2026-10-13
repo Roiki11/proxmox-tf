@@ -81,6 +81,93 @@ vault_pki_role      = "proxmox-node"
 vault_pki_ttl       = "8760h"
 
 ###############################################################################
+# Direct cluster configuration (phase 2): storage, network, SDN and Ceph,
+# managed via the bpg/proxmox provider. Apply selectively:
+#   make pve-storage | pve-network | pve-sdn | pve-ceph
+###############################################################################
+
+# Storage definitions (keyed by storage ID).
+storage_directories = {
+  "iso-store" = {
+    path     = "/tank/iso"
+    content  = ["iso"]
+    nodes    = ["node01", "node02", "node03"]
+    shared   = true
+    create_base_path = true
+    create_subdirs   = true
+    backups = {
+      keep_daily = 7
+      max_protected_backups = 5
+    }
+  }
+}
+storage_zfspool = {
+  "fast-pool" = {
+    zfs_pool       = "rpool/fast"
+    content        = ["images", "rootdir"]
+    nodes          = ["node01", "node02", "node03"]
+    thin_provision = true
+  }
+}
+# storage_lvm = { ... volume_group, thin_pool (lvmthin) ... }
+# storage_nfs = { ... server, export ... }
+# storage_cifs = { ... server, share, username ... SMB password from Vault
+#                  field 'storage_<id>_password' }
+# storage_pbs = { ... server, datastore, username, fingerprint ... PBS
+#                 password from Vault field 'storage_<id>_password' }
+
+# Node network interfaces (staged, then activated by the per-node applier).
+network_bridges = {
+  "node01-vmbr1" = {
+    node_name = "node01"
+    name      = "vmbr1"
+    ports     = ["eno1"]
+    vlan_aware = true
+    vids      = "2-4094"
+    comment   = "guest bridge"
+  }
+}
+# network_bonds = { ... slaves, bond_mode ... }
+# network_vlans = { ... name 'eno1.99' or custom name + interface + vlan ... }
+
+# SDN: zones -> VNets -> subnets; changes are applied by the SDN applier.
+sdn_zones = {
+  "vlan1" = {
+    type   = "vlan"
+    bridge = "vmbr0"
+    ipam   = "pve"
+  }
+}
+sdn_vnets = {
+  "vnet10" = {
+    zone = "vlan1"
+    tag  = 10
+  }
+}
+sdn_subnets = {
+  "vnet10-subnet" = {
+    vnet     = "vnet10"
+    cidr     = "10.10.10.0/24"
+    gateway  = "10.10.10.1"
+    snat     = true
+  }
+}
+# sdn_zones type 'vxlan' takes peers = node IPs; 'evpn' takes controller +
+# vrf_vxlan. Requires an existing bridge for vlan zones.
+
+# Ceph pools (declare after Ceph is initialized on the cluster; pools only —
+# monitors/OSDs are not managed by the provider).
+# ceph_pools = {
+#   "tank" = {
+#     size     = 3
+#     min_size = 2
+#     pg_num   = 128
+#     application = "rbd"
+#     add_storages = true
+#   }
+# }
+
+###############################################################################
 # Phase 3: manage the cluster as a remote in Proxmox Datacenter Manager
 # through its REST API.
 ###############################################################################
