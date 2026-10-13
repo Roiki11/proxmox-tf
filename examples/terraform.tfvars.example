@@ -89,3 +89,27 @@ pdm_enabled  = true
 pdm_api_url  = "https://10.0.0.2:8007" # PDM REST API base URL
 pdm_web_url  = "https://10.0.0.2:8007"
 pdm_verify_nodes = true
+
+# Node configuration applied through the PDM REST API (see variables-pdm.tf).
+# Writable through PDM: APT database updates and node firewall options.
+pdm_node_config = {
+  node01 = {
+    apt_update = true
+    firewall_options = {
+      enable           = true
+      log_level_in     = "info"
+      nftables         = false
+      protection_synflood = true
+    }
+  }
+  node02 = {
+    apt_update = true
+  }
+}
+
+# One-off inspection/management tasks (connection via PDM_* env vars):
+#   make pdm-node-status PDM_NODE=node01
+#   make pdm-node-network PDM_NODE=node01
+#   make pdm-node-updates PDM_NODE=node01
+#   make pdm-node-apply PDM_NODE=node01
+#   make pdm-updates-refresh

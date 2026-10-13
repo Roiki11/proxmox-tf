@@ -20,6 +20,11 @@ Terraform/OpenTofu project that bootstraps **Proxmox VE clusters** end-to-end:
 6. **Node TLS certificates** — per-node certificates are issued from a Vault PKI
    secret backend and installed on the nodes, replacing the default self-signed
    `pveproxy` certificates.
+7. **Node configuration through PDM** — applies APT database updates and node
+   firewall options through PDM's proxied REST API
+   (`/pve/remotes/{remote}/nodes/{node}/...`), with Makefile tasks for
+   inspecting node status, network, storage, repositories, subscription and
+   pending updates.
 
 ```
                        ┌────────────────────────────────────────────┐
@@ -141,7 +146,9 @@ When `pdm_enabled = true` the project talks directly to the PDM REST API
 4. optionally probes every node's TLS certificate
    (`POST /api2/json/remotes/remote/{id}/probe-certificate`, `pdm_verify_nodes`),
 5. removes the remote again on `make destroy`
-   (`DELETE /api2/json/remotes/remote/{id}?delete-token=...`, token deletion configurable).
+   (`DELETE /api2/json/remotes/remote/{id}?delete-token=...`, token deletion configurable),
+6. applies per-node configuration (APT updates, firewall options) declared in
+   `pdm_node_config` — see "Node configuration through PDM" below.
 
 ## Node TLS certificates (phase 2)
 
@@ -176,6 +183,43 @@ fields (`root_password`, `root_password_hashed`, `pve_password`, `pve_api_token`
 `node_isos`, `node_answer_files`, `node_first_boot_hooks`, `bootstrap_node`,
 `installation_instructions`, `pve_nodes`, `node_certificates`, `secrets_source`,
 `pdm_remote_id`, `pdm_authid`.
+
+## Node configuration through PDM (phase 3)
+
+PDM proxies a subset of the PVE node API under
+`/api2/json/pve/remotes/{remote}/nodes/{node}/...`. Writable through PDM:
+
+| Operation | Endpoint | Driven by |
+| --- | --- | --- |
+| Refresh APT package database | `POST .../apt/update` | `pdm_node_config.<node>.apt_update` on apply, or `make pdm-node-apt-update PDM_NODE=<name>` |
+| Node firewall options | `PUT .../firewall/options` | `pdm_node_config.<node>.firewall_options` on apply, or `make pdm-node-apply` |
+
+Read-only inspection tasks (connection settings via `PDM_API_URL`,
+`PDM_API_USER`/`PDM_API_PASSWORD` or `PDM_API_TOKEN` env vars; `PDM_REMOTE_ID`
+defaults to the `pdm_remote_id` output):
+
+```bash
+make pdm-node-status       PDM_NODE=node01   # node status
+make pdm-node-config       PDM_NODE=node01   # node configuration
+make pdm-node-network      PDM_NODE=node01   # network interfaces (read-only)
+make pdm-node-updates      PDM_NODE=node01   # pending APT updates
+make pdm-node-repositories PDM_NODE=node01   # APT repositories
+make pdm-node-subscription PDM_NODE=node01   # subscription status
+make pdm-node-storage      PDM_NODE=node01   # storage status
+make pdm-updates-refresh                     # refresh PDM's cached update summary
+make pdm-updates-summary                     # show PDM's update summary
+```
+
+Apply the declarative `pdm_node_config` for every node with `make apply`, or a
+single node with `make pdm-node-apply PDM_NODE=node01`. The applied resource is
+`terraform_data.pdm_node_config` (`pdm-nodes.tf`), which re-runs when the
+configuration, credentials or remote change; changes are not reverted on
+destroy (an APT update cannot be undone).
+
+> **Note**: in PDM 1.x the proxied endpoints are read-only for network
+> interfaces, subscription and power management, and storage/repositories are
+> inspect-only. Manage those on PVE directly (e.g. via the `bpg/proxmox`
+> provider's network/storage resources).
 
 ## Limitations / notes
 
